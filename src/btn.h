@@ -5,8 +5,11 @@
 #include <array>
 #include <vector>
 #include <deque>
+#include <algorithm>//use for find and erase in the deque
 
 #define BUTTON_PIN 5
+#define GREEN_PIN 0
+#define RED_PIN 1
 #define LED_PIN 8
 #define SEARCH_TIMEOUT 2000 //how long to wait while searching before becoming master
 #define SEARCH_BROADCAST_INTERVAL 250
@@ -19,7 +22,6 @@
 #define ID_REQUEST_INTERVAL 1000
 
 using MacAddr = std::array<uint8_t, 6>;
-using Queue = std::deque<uint8_t>; // queue of assigned ids to manage button press order
 constexpr MacAddr broadcastAddr = {0xFF, 0xFF, 0xFF, 0xFF, 0xFF, 0xFF};
 
 // Benefit of storing multiple flags in a single integer:
@@ -43,7 +45,8 @@ enum msgTypes : uint8_t {
   MSG_HEARTBEAT      = 1 << 1,
   MSG_BTN         = 1 << 2,
   MSG_UPDATE         = 1 << 3,
-  MSG_PEER_MACS_IDS = 1 << 4
+  MSG_PEER_MACS_IDS = 1 << 4,
+  MSG_CURRENT_QUEUE = 1 << 5
 };
 
 // Device receive modes
@@ -100,7 +103,8 @@ struct __attribute__((packed)) newMember_t {
 
 struct __attribute__((packed)) heartBeat_t{
   msgTypes msgType = MSG_HEARTBEAT;
-  uint8_t latestId = 0;
+  uint8_t queueSize = 0;
+  MacAddr macs[30];
 };
 
 //msg type just to collect the mac addresses and their associated ids for new members
@@ -112,30 +116,23 @@ struct __attribute__((packed)) peerMacsIds_t{
 
 
 
-
-
-
 void newPeerConfig(const PeerInfo_t &peerInfo);
 void blink(int duration = 500, int pin = LED_PIN);
 void heartBeat();
 void updatePeerData(const PeerInfo_t &peerInfo, int index);
-void assignId(PeerInfo_t &peerInfo, int index);
 void addBroadcastPeer();
-bool assignUpdateLastMasterAssigned(PeerInfo_t &peerInfo);
-bool assignMasterId();
 int jitter();
 int getPeerIndex(const PeerInfo_t &peerInfo);
 // Added missing prototypes implemented in btn.cpp
 bool checkTimeout(unsigned long startTime);
 bool listenHeartbeat();
-void sendSearchBroadcast();
 void handleHeartBeat();
 void handleBtnData();
-void handleNewMember();
-void printKnownPeers();
-void sendKnownPeers(MacAddr &mac); 
-void handlePeerMacsIds();
-
+bool handleButtonPress(const MacAddr& mac);
+void sendCurrentQueue(const MacAddr &mac); 
+void sendButtonPress(); 
+void assignLedColor();
+void initGPIO();
 // Shared global state (defined in main.cpp)
 extern btnData_t myData;
 extern btnData_t recvData;
@@ -146,6 +143,9 @@ extern RxMode currentMode;
 extern PeerInfo_t masterPeerInfo;
 extern PeerInfo_t broadcastPeerInfo;
 extern PeerInfo_t recvPeer;
+extern std::deque<MacAddr> masterQueue; 
+extern MacAddr currentQueue[30];
+extern MacAddr myMacAddr;
 
 extern unsigned long searchStart;
 extern unsigned long lastRecvHeartbeat;

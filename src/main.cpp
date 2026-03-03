@@ -23,6 +23,7 @@
 
 MacAddr recvAddr = {0, 0, 0, 0, 0, 0};
 MacAddr masterAddr = {0, 0, 0, 0, 0, 0};
+MacAddr myMacAddr = {0, 0, 0, 0, 0, 0};
 
 btnData_t myData, recvData;
 newMember_t newMemberData; // data structure for new member messages
@@ -31,6 +32,7 @@ heartBeat_t heartBeatData; // data structure for heartbeat messages
 RxMode currentMode = SEARCHING;
 
 std::vector<PeerInfo_t> knownPeers; // list of known peers
+std::deque<MacAddr> masterQueue; //store the list to be manipulated
 
 unsigned long searchStart = 0;
 unsigned long searchBroadcastStart = 0;
@@ -48,6 +50,8 @@ PeerInfo_t broadcastPeerInfo = {broadcastAddr, myData}; // broadcast peer info
 PeerInfo_t recvPeer;                                   // received peer info in callback
 
 peerMacsIds_t peerMacsIdsData; // data structure for peer mac and id collection messages
+
+MacAddr currentQueue[30] = {}; //stores list to be sent
 
 void onReceive(const uint8_t *mac, const uint8_t *data, int len)
 {
@@ -83,6 +87,12 @@ void onReceive(const uint8_t *mac, const uint8_t *data, int len)
       pendingMsg = MSG_PEER_MACS_IDS;
       readyForMsg = false; // wait to process before accepting another message
       break;
+
+    case MSG_CURRENT_QUEUE:
+      memcpy(&currentQueue, data, sizeof(currentQueue));
+      pendingMsg = MSG_CURRENT_QUEUE;
+      readyForMsg = false;
+      break;
       
     default:
       break;
@@ -92,15 +102,15 @@ void onReceive(const uint8_t *mac, const uint8_t *data, int len)
 
 void setup()
 {
-  pinMode(BUTTON_PIN, INPUT_PULLUP);
-  pinMode(LED_PIN, OUTPUT);
-  digitalWrite(LED_PIN, LOW);
+  initGPIO();
 
   Serial.begin(115200);
   delay(100);
   Serial.println("Booting...");
 
   WiFi.mode(WIFI_STA);
+
+  WiFi.macAddress(myMacAddr.data());  //store my mac address
 
   // Force channel (must match on both boards)
   esp_wifi_set_channel(1, WIFI_SECOND_CHAN_NONE);
@@ -132,7 +142,6 @@ void loop()
 
     case MSG_NEW_MEMBER:
       pendingMsg = MSG_NONE;
-      handleNewMember(); // handle new member logic in separate function to keep things organized
       readyForMsg = true; 
       break;
 
@@ -149,7 +158,6 @@ void loop()
 
     case MSG_PEER_MACS_IDS:
       pendingMsg = MSG_NONE;    
-      handlePeerMacsIds();
       readyForMsg = true; 
       break;
 
@@ -167,19 +175,10 @@ void loop()
       case OPERATION:{
         blink(OPERATION_BLINK_DURATION);
       // If master connection is lost
-        if (!listenHeartbeat())  break; 
+        if (!listenHeartbeat())  break;  
+      //check if button was pressed - if so, send UPDATE flag to master
+        sendButtonPress(); 
         
-        if(myData.hasFlag(ID_REQUESTED)){
-          static unsigned long lastIdRequest = 0;
-          static unsigned long requestWait = millis() + random(50, ID_REQUEST_INTERVAL);
-          if ((millis() - lastIdRequest) > requestWait) {
-          requestWait =random(20, ID_REQUEST_INTERVAL); 
-          esp_err_t sendStatus = esp_now_send(masterPeerInfo.macAddr.data(), (uint8_t *)&myData, sizeof(myData));
-          Serial.printf("ID request to master sent, send status = %d (%s)\n", (int)sendStatus, esp_err_to_name(sendStatus));
-          lastIdRequest = millis();
-          }
-        //REMEMBER TO CLEAR THE ID_REQUESTED FLAG WHEN MASTER ASSIGNS AN ID IN THE MASTER'S CASE STATEMENT
-        }
       // Normal operation
       break;
       }

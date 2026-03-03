@@ -1,27 +1,37 @@
-This program utilizes ESP_Now to establish a connection between devices in a network. There is one master device (who also behaves as a client) and many client devices. 
-The master unicasts to each and assigns properties to the clients as they come online and their state changes via button press.  This topology was chosen over
-all devices being permitted to broadcast to all their states as a means of decreasing traffic/collisions and increasing reliability. 
+/********** PURPOSE ***************/
 
-The device begins SEARCHING. where it broadcasts to all. The properties that are shared in every conversation are in the btnData struct. Currently, they are isSearching, 
-isMaster, id, and lastIdAssigned - which is the latest id the master assigned to the most recent new device. 
+The purpose of this program is to monitor and manage a live queue of students who have requested assistance. It is designed to replace traditional "hand raising"
+which can be cumbersome for a student who is trying to keep their hand raised and continue writing or working. Unlike hand raising, there is no ambiguity 
+between which student asked for help first. 
 
-If the device searches for too long it will timeout and become the master. When the device is in the MASTER state - it listens to devices who are broadcasting and whose 
-data isSearching is true. When this is the case, the master stores the mac in a vector of known peers, configures the peer for future unicasts, assigns an id to the device
-and responds to the device. When a SEARCHING device hears from the master, its isSearching goes false, its state turns to OPERATION, it sets its id to the id received
-and then it adds the master's mac address and configures the master as a peer. 
+The students interface with the queue through a single large button with an RGB led embedded into it. When the button is pressed, the student is added to the queue.
+If the student is in the  front of the queue, the button will be green. Students that are in the queue but waiting will having blinking red buttons - 
+with the frequency being a function of their position in the queue. 
 
-The tricky part of the program lies in the election process of the master happens to fall offline. The master periodically broadcasts a heartbeat - which is simply its
-btnData (which again, is shared in EVERY communication). When OPERATION  devices hear from the master, they record  the lastHeartbeatms. If too much time has elapsed since
-the lastHeartbeatms - the devices will pause for a time calculated as a function of their id. This delay is critical since all online devices will timeout roughly at the 
-same time. So how would they know who gets elected? The lowest id will have the shortest delay (since the id value is used as a factor in the delay calculation). After
-this delay,  the device starts SEARCHING. Since this device starts SEARCHING, if the master happens to come right back online, the SEARCHING device will transfer states
-to SEARCHING, however, if no master is found, this first device that starts searching will timeout before all other devices and will be assigned MASTER and the cycle 
-continues. 
+/**********  PROGRAM CONCEPT  **************/
 
-This new master currently reassigns ids as it has no list of knownPeers (aside from the master) and configures all SEARCHING devices as they return back online. If 
-this election happens so quickly that those devices currently in delays after timeouts -thus still in OPERATION - check to see that when they receive a signaL from the
-master that not only is the isMaster true, but  that the transmitterAddr matches the masterAddr they have on record. If it does not - they share their info with the 
-new master so they can be reconfigured and so they can add the new master as peer - all before entering SEARCHING. 
+The buttons form a wirless network for communication. This program utilizes ESP_Now to create this network. There is one master device/button (who also may behave 
+as a client) and the remaining buttons are clients. The master is responsible for managing the queue and the network. All devices begin in SEARCHING mode, where
+they remain idle, listening for a heartbeat from the master. The heartbeat contains the current queue, as an array of mac addresses, and the number of devices 
+in the queue. When a searching device hears the heartbeat, it moves into OPERATION mode. If 3 heartbeats are missed (currently 1.5 seconds), the SEARCHING device
+promotes itself MASTER. 
 
-The main issue currently is reassigning an id every time a new master appears. Since the delay is based on the id number,  as these numbers grow, so does the pause before 
-election. 
+The trickiest part of this network is maintaining management and allowing the queue to persist should the master fall offline for any reason. If the master falls
+offline, the devices in OPERATION recognize after 3 missed heartbeats. If the current queue is populated, the first device in the queue is elected, if
+not, devices in OPERAITON wait for a randomly designated amount of time and then go into SEARCHING. This delay is vital so that a herd of devices arent all
+timing out of SEARCHING at once. Since all devices should record the queue after each heartbeat,  this new MASTER should already contain a copy of the last queue
+and restore it. Should the master receive a heartbeat, it will alert that multiple masters are detected and it will fall into SEARCHING to retry a proper election.  
+
+When a device in OPERATION is pressed, it unicasts a message to the master containing a flag that the button was pressed. If the device's mac is currently in the 
+queue, that device is popped from the master's deque. If the device is not in the queue, it is pushed to the back. Any alteration of the queue will result in an
+immediate unicast to the requesting device, followed by a broadcast from the master. However, since there is no acknowledgement/built-in retries for broadcasted 
+messasges, should a device miss the update it should resync upon the next heartbeat. 
+
+As devices receive the queue updates from the master they find their position in the list and adjust their own leds accordingly. 
+
+
+/********* IMPROVEMENT/DEVELOPMENT NOTES **********/
+Buttons not in the queue should go into a deep sleep - awakened by a hardware interrupt attached to the button. This may be slow as the device will need to wake
+SEARCHING since a master couldve fallen offline when the device went into sleep. While the device is SEARCHING, the led should blink a unique color for feedback. 
+
+I may attach a flag for low remaining power devices such that they CANNOT be elected MASTER, since the master will be by far the most power hungry role.
