@@ -215,13 +215,12 @@ void handleBtnData(){
 void sendCurrentQueue(const MacAddr &mac){
   //will need to think about gaurds/segmenting/chunking if list grows over 30
   size_t listSize = masterQueue.size()<=30 ? masterQueue.size() : 30;  
-  heartBeat_t macBuffer = {};
-  macBuffer.queueSize = listSize; 
+  heartBeatData.queueSize = listSize; 
   //fill the buffer
   for(int i = 0; i<(int)listSize; i++ ){
-    macBuffer.macs[i] = masterQueue[i];
+    heartBeatData.macs[i] = masterQueue[i];
   }
-      esp_err_t sendStatus = esp_now_send(mac.data(), (uint8_t *)&macBuffer, sizeof(macBuffer));
+      esp_err_t sendStatus = esp_now_send(mac.data(), (uint8_t *)&heartBeatData, sizeof(heartBeatData));
       Serial.printf("Sending current queue, send status = %d (%s)\n", 
                     (int)sendStatus, esp_err_to_name(sendStatus));
 }
@@ -238,11 +237,10 @@ void updateQueue(){
 void sendButtonPress(){
   static bool lastState = true; 
   bool currentState = digitalRead(BUTTON_PIN);
-
+    delay(20);//may need nonblocking debounce but i dont think so 
   if(!currentState && lastState){
     //button pressed - falling edge 
     //send update - this will toggle on the master's side depending on if theyre in the queue
-    delay(20);//may need nonblocking debounce but i dont think so 
     myData.setFlags(UPDATE_NEEDED);
     esp_err_t sendStatus = esp_now_send(masterPeerInfo.macAddr.data(), (uint8_t *)&myData, sizeof(myData));
     Serial.printf("Sent update request, send status = %d (%s)\n", (int)sendStatus, esp_err_to_name(sendStatus));
