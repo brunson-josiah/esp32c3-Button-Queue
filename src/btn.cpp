@@ -67,10 +67,9 @@ bool listenHeartbeat()
 {
   if ((millis() - lastRecvHeartbeat) > (HEARTBEAT_INTERVAL * 3)) {
     Serial.println("Connection to master lost, going back to SEARCHING");
-    offsetNewSearchWait = BASE_WAIT + (myData.id * SLOT_WAIT) + jitter();
     myData.setFlags(IS_SEARCHING);
     myData.clearFlags(IS_MASTER);
-    delay(offsetNewSearchWait); // stagger retries based on last assigned id
+    delay(offsetNewSearchWait()); // stagger retries based on last assigned id
     searchStart = millis();
     currentMode = SEARCHING;
     return false;
@@ -161,8 +160,7 @@ void handleHeartBeat(){
       }
       case MASTER:{
         Serial.printf("Received heartbeat in MASTER mode - stepping down\n");
-        offsetNewSearchWait = BASE_WAIT + (myData.id * SLOT_WAIT) + jitter();
-        delay(offsetNewSearchWait); // add delay and jitter to avoid collisions with other devices also stepping down
+        delay(offsetNewSearchWait()); // add delay and jitter to avoid collisions with other devices also stepping down
         searchStart = millis();
         myData.clearFlags(IS_MASTER);
         myData.setFlags(IS_SEARCHING);
@@ -328,4 +326,9 @@ void initGPIO(){
   digitalWrite(LED_PIN,1);//turn built in off
   digitalWrite(RED_PIN,0);
   digitalWrite(GREEN_PIN,0);
+}
+
+int offsetNewSearchWait(){
+  int integer = random(0,50);
+  return (int)(BASE_WAIT+ integer*SLOT_WAIT +jitter());
 }

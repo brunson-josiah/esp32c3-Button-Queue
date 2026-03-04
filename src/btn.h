@@ -14,7 +14,7 @@
 #define SEARCH_TIMEOUT 2000 //how long to wait while searching before becoming master
 #define SEARCH_BROADCAST_INTERVAL 250
 #define BASE_WAIT 100           // base wait time before retrying search after losing master
-#define SLOT_WAIT 50            // additional wait time per id slot before retrying search after losing master
+#define SLOT_WAIT 30            // additional wait time per id slot before retrying search after losing master
 #define MAX_JITTER_WAIT 20      // max additional random wait time to add jitter to search retries
 #define OPERATION_BLINK_DURATION 1000
 #define SEARCHING_BLINK_DURATION 200
@@ -134,6 +134,7 @@ void sendButtonPress();
 void assignLedColor();
 void initGPIO();
 bool checkMasterButtonPress();
+int offsetNewSearchWait();
 
 // Shared global state (defined in main.cpp)
 extern btnData_t myData;
