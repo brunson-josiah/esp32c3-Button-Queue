@@ -187,8 +187,8 @@ void loop()
         digitalWrite(LED_PIN, LOW);
         if(checkMasterButtonPress()){
           handleButtonPress(myMacAddr);//add/remove from queue
-          assignLedColor();//choose color
           sendCurrentQueue(broadcastAddr);//tell everyone to update their list
+          assignLedColor();//choose color
         }
         break;
      }

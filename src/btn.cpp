@@ -203,6 +203,7 @@ void handleBtnData(){
           sendCurrentQueue(recvPeer.macAddr);//unicasts direct to requesting clien
           delay(10);//in esp32 this is non blocking for the wifi
           sendCurrentQueue(broadcastAddr); 
+          assignLedColor();
         }
     break;
       }
@@ -252,15 +253,16 @@ void sendButtonPress(){
 //for only the master since he can auto adjust queue
 bool checkMasterButtonPress(){
     static bool lastState = true; 
-    static bool toggle = false; 
+    bool justPressed = false;
     bool currentState = digitalRead(BUTTON_PIN);
     delay(20);//may need nonblocking debounce but i dont think so 
   if(!currentState && lastState){
     //button pressed - falling edge 
-    toggle = !toggle; 
+    justPressed = true;
   }
+
   lastState = currentState;
-  return toggle;
+  return justPressed;
 }
 
 void assignLedColor(){
