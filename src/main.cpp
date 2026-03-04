@@ -185,6 +185,11 @@ void loop()
     case MASTER:{
         heartBeat(); // sending the heartbeat allows searching devices to either find a master or be elected - similarly, when a master falls offline a missed heartbeat triggers new election
         digitalWrite(LED_PIN, LOW);
+        if(checkMasterButtonPress()){
+          handleButtonPress(myMacAddr);//add/remove from queue
+          assignLedColor();//choose color
+          sendCurrentQueue(broadcastAddr);//tell everyone to update their list
+        }
         break;
      }
     } 

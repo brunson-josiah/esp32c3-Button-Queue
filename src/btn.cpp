@@ -233,7 +233,7 @@ void updateQueue(){
   
 
 }
-
+//for all clients
 void sendButtonPress(){
   static bool lastState = true; 
   bool currentState = digitalRead(BUTTON_PIN);
@@ -247,6 +247,20 @@ void sendButtonPress(){
     myData.clearFlags(UPDATE_NEEDED);
   }
   lastState = currentState;
+}
+
+//for only the master since he can auto adjust queue
+bool checkMasterButtonPress(){
+    static bool lastState = true; 
+    static bool toggle = false; 
+    bool currentState = digitalRead(BUTTON_PIN);
+    delay(20);//may need nonblocking debounce but i dont think so 
+  if(!currentState && lastState){
+    //button pressed - falling edge 
+    toggle = !toggle; 
+  }
+  lastState = currentState;
+  return toggle;
 }
 
 void assignLedColor(){
@@ -310,6 +324,6 @@ void initGPIO(){
   pinMode(BUTTON_PIN,INPUT_PULLUP); 
 
   digitalWrite(LED_PIN,1);//turn built in off
-  digitalWrite(RED_PIN,0);//turn built in off
-  digitalWrite(GREEN_PIN,0);//turn built in off  
+  digitalWrite(RED_PIN,0);
+  digitalWrite(GREEN_PIN,0);
 }

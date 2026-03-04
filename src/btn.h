@@ -133,6 +133,8 @@ void sendCurrentQueue(const MacAddr &mac);
 void sendButtonPress(); 
 void assignLedColor();
 void initGPIO();
+bool checkMasterButtonPress();
+
 // Shared global state (defined in main.cpp)
 extern btnData_t myData;
 extern btnData_t recvData;
