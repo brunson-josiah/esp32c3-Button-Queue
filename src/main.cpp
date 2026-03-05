@@ -37,9 +37,9 @@ std::deque<MacAddr> masterQueue; //store the list to be manipulated
 unsigned long searchStart = 0;
 unsigned long searchBroadcastStart = 0;
 unsigned long lastRecvHeartbeat = 0;
+int heartbeatTimeout = 0; 
 uint8_t lastAssignedId = 0;
 uint8_t nextMasterIdUp = 0;
-int offsetNewSearchWait = 0;
 
 volatile bool readyForMsg = true; 
 volatile msgTypes pendingMsg = MSG_NONE; // type of pending message to process in loop, set in ISR/callback
@@ -55,6 +55,8 @@ MacAddr currentQueue[30] = {}; //stores list to be sent
 
 void onReceive(const uint8_t *mac, const uint8_t *data, int len)
 {
+  if(data[0] == MSG_HEARTBEAT) lastRecvHeartbeat = millis();
+
  if(readyForMsg){
   switch (data[0]) { // check the msg type
     case MSG_HEARTBEAT:
@@ -127,6 +129,7 @@ void setup()
   addBroadcastPeer();
   searchStart = millis();
   searchBroadcastStart = millis();
+  heartbeatTimeout =  offsetNewSearchWait(); 
 }
 
 void loop()

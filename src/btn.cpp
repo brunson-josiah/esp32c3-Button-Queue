@@ -34,13 +34,13 @@ int getPeerIndex(const PeerInfo_t &peerInfo)
 
 bool checkTimeout(unsigned long startTime)
 {//if we miss 3 heartbeats while searching, we become master and send heartbeat
-  if ((millis() - startTime) > HEARTBEAT_INTERVAL * 3) {
+  if ((millis() - startTime) > (HEARTBEAT_INTERVAL * 3 + heartbeatTimeout)) {
     // Timeout - become master
     myData.setFlags(IS_MASTER, IS_HEARTBEAT);
     myData.clearFlags(IS_SEARCHING);
     currentMode = MASTER;
     Serial.println("No master found - becoming MASTER");
-
+    heartbeatTimeout = offsetNewSearchWait();
     // broadcast a heartbeat to all
     esp_err_t sendStatus = esp_now_send(broadcastAddr.data(), (uint8_t *)&heartBeatData, sizeof(heartBeatData));
     myData.clearFlags(IS_HEARTBEAT);
@@ -65,13 +65,14 @@ void updatePeerData(PeerInfo_t &peerInfo, int index)
 // returns false if failed to receive heartbeat after 3 attempts and causes the device to begin searching
 bool listenHeartbeat()
 {
-  if ((millis() - lastRecvHeartbeat) > (HEARTBEAT_INTERVAL * 3)) {
+  if ((millis() - lastRecvHeartbeat) > (HEARTBEAT_INTERVAL * 3 + heartbeatTimeout)) {
     Serial.println("Connection to master lost, going back to SEARCHING");
     myData.setFlags(IS_SEARCHING);
-    myData.clearFlags(IS_MASTER);
-    delay(offsetNewSearchWait()); // stagger retries based on last assigned id
-    searchStart = millis();
     currentMode = SEARCHING;
+    myData.clearFlags(IS_MASTER);
+    heartbeatTimeout = offsetNewSearchWait();
+     // stagger retries based on last assigned id
+    searchStart = millis();
     return false;
   }
   return true;
@@ -115,7 +116,7 @@ void blink(int duration, int pin)
 
 int jitter()
 {
-  return random(0, MAX_JITTER_WAIT);
+  return int(esp_random() % MAX_JITTER_WAIT);
 }
 
 void addBroadcastPeer()
@@ -160,11 +161,19 @@ void handleHeartBeat(){
       }
       case MASTER:{
         Serial.printf("Received heartbeat in MASTER mode - stepping down\n");
-        delay(offsetNewSearchWait()); // add delay and jitter to avoid collisions with other devices also stepping down
-        searchStart = millis();
+        
+        if(masterPeerInfo.macAddr > myMacAddr){
+        Serial.printf("Stepping down ....");
         myData.clearFlags(IS_MASTER);
-        myData.setFlags(IS_SEARCHING);
-        currentMode = SEARCHING;
+        myData.setFlags(IS_OPERATING);
+        currentMode = OPERATION;
+        heartbeatTimeout = offsetNewSearchWait(); // add delay and jitter to avoid collisions with other devices also stepping down
+        searchStart = millis();
+        }
+        else {
+          Serial.printf("I have larger MAC, asserting dominance"); 
+        }
+        
         break;
       }
    }
@@ -329,6 +338,6 @@ void initGPIO(){
 }
 
 int offsetNewSearchWait(){
-  int integer = random(0,50);
-  return (int)(BASE_WAIT+ integer*SLOT_WAIT +jitter());
+  int integer = esp_random() % 40;//this random function generates a 32bit integer, so the mod confines the max
+  return int(BASE_WAIT+ integer*SLOT_WAIT +jitter());
 }

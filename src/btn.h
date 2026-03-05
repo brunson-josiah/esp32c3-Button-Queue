@@ -154,7 +154,7 @@ extern unsigned long searchStart;
 extern unsigned long lastRecvHeartbeat;
 extern uint8_t lastAssignedId;
 extern uint8_t nextMasterIdUp;
-extern int offsetNewSearchWait;
 extern volatile bool readyForMsg;
 extern volatile msgTypes pendingMsg;
+extern int heartbeatTimeout;
 #endif
