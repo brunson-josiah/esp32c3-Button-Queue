@@ -196,6 +196,5 @@ void loop()
         break;
      }
     } 
-  delay(10);
   }
 

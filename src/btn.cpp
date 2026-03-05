@@ -245,8 +245,9 @@ void updateQueue(){
 void sendButtonPress(){
   static bool lastState = true; 
   bool currentState = digitalRead(BUTTON_PIN);
-    delay(20);//may need nonblocking debounce but i dont think so 
   if(!currentState && lastState){
+    delay(20);//may need nonblocking debounce but i dont think so 
+
     //button pressed - falling edge 
     //send update - this will toggle on the master's side depending on if theyre in the queue
     myData.setFlags(UPDATE_NEEDED);
