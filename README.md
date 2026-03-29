@@ -1,3 +1,8 @@
+/********** DEMO ************/
+![Short demo](buttonQueueExample.gif)
+
+[Full demo video](https://photos.app.goo.gl/GJdPcA1xx7kngdMS9)
+
 /********** PURPOSE ***************/
 
 The purpose of this program is to monitor and manage a live queue of students who have requested assistance. It is designed to replace traditional "hand raising" which can be cumbersome for a student who is trying to keep their hand raised and continue writing or working. Unlike hand raising, there is no ambiguity between which student asked for help first. 
