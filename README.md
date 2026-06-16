@@ -1,32 +1,114 @@
-/********** DEMO ************/
+# ESP32-C3 Student Help Queue
+
+This project is a working prototype of a classroom queue system built with ESP32-C3 boards and ESP-NOW. Students press a button to join or leave a help queue, while RGB LEDs provide immediate status feedback. The network uses heartbeat monitoring and automatic master failover so the queue can continue operating if the current master device drops offline.
+
+## Demo
+
 ![Short demo](buttonQueueExample.gif)
 
 [Full demo video](https://photos.app.goo.gl/GJdPcA1xx7kngdMS9)
 
-/********** PURPOSE ***************/
+## Purpose
 
-The purpose of this program is to monitor and manage a live queue of students who have requested assistance. It is designed to replace traditional "hand raising" which can be cumbersome for a student who is trying to keep their hand raised and continue writing or working. Unlike hand raising, there is no ambiguity between which student asked for help first. 
+The purpose of this project is to monitor and manage a live queue of students who have requested assistance. It is designed to replace traditional hand-raising, which can be cumbersome for a student who is trying to keep their hand raised while continuing to write or work.
 
-The students interface with the queue through a single large button with an RGB led embedded into it. When the button is pressed, the student is added to the queue. If the student is in the  front of the queue, the button will be green. Students that are in the queue but waiting will having blinking red buttons - with the frequency being a function of their position in the queue. 
+Unlike hand-raising, this system removes ambiguity about which student asked for help first. Each student interacts with the queue through a single large button with an embedded RGB LED.
 
-/**********  PROGRAM CONCEPT  **************/
+When the button is pressed, the student is added to the queue. If the student is at the front of the queue, the button turns green. Students who are in the queue but waiting receive red LED feedback. If the student is not currently in the queue, the LED is off.
 
-The buttons form a wirless network for communication. This program utilizes ESP_Now to create this network. There is one master device/button (who also may behave as a client) and the remaining buttons are clients. The master is responsible for managing the queue and the network. All devices begin in SEARCHING mode, where they remain idle, listening for a heartbeat from the master. The heartbeat contains the current queue, as an array of mac addresses, and the number of devices 
-in the queue. When a searching device hears the heartbeat, it moves into OPERATION mode. If 3 heartbeats are missed (currently 1.5 seconds), the SEARCHING device promotes itself MASTER. 
+## System Overview
 
-The trickiest part of this network is maintaining management and allowing the queue to persist should the master fall offline for any reason. If the master falls offline, the devices in OPERATION are made aware after 3 missed heartbeats. If the current queue is populated, the first device in the queue is elected, if not, devices in OPERATION wait for a randomly designated amount of time and then go into SEARCHING. This delay is vital so that a herd of devices arent all timing out of SEARCHING at once. Since all devices should record the queue after each heartbeat,  this new MASTER should already contain a copy of the last queueb and restore it. Should the master receive a heartbeat, it will compare its own mac address to that of the device also sending a heartbeat, the lower mac address will yield and fall into OPERATION while the larger mac address will remain MASTER. 
+The buttons form a wireless network using ESP-NOW. The network uses a star-like master/client structure. One device acts as the master, while the remaining devices operate as clients. The master is responsible for maintaining the queue and sending queue updates to the rest of the network.
 
-When a device in OPERATION is pressed, it unicasts a message to the master containing a flag that the button was pressed. If the device's mac is currently in the queue, that device is popped from the master's deque. If the device is not in the queue, it is pushed to the back. Any alteration of the queue will result in an immediate unicast to the requesting device, followed by a broadcast from the master. With ESP-NOW, unicasted messages have an automatic retransmission requests built into the protocol. This is why the master first unicasts confirmation - for improved reliability. However, since there is no acknowledgement/built-in retries for broadcasted messasges, should a device miss the update it should resync upon the next heartbeat. 
+Each device begins in `SEARCHING` mode. In this mode, the device listens for a heartbeat from an existing master. If it receives a heartbeat, it registers the master as a peer and moves into `OPERATION` mode.
 
-As devices receive the queue updates from the master they find their position in the list and adjust their own leds accordingly. 
+If no heartbeat is received within the timeout period, the device promotes itself to `MASTER` and begins broadcasting heartbeat messages.
 
-/********* IMPROVEMENT/DEVELOPMENT NOTES **********/
-As the archectural strategy has progresseed/altered many times throughout this project, there are several unused structs and functions that will need cleaning. 
+## Device Modes
 
-Buttons not in the queue should go into a deep sleep - awakened by a hardware interrupt attached to the button. This may be slow as the device will need to wake SEARCHING since a master couldve fallen offline when the device went into sleep. While the device is SEARCHING, the led should blink a unique color for feedback. 
+The program uses three main device modes:
 
-I may attach a flag for low remaining power devices such that they CANNOT be elected MASTER, since the master will be by far the most power hungry role.
+* `SEARCHING`: The device is looking for an existing master.
+* `OPERATION`: The device has found a master and operates as a client.
+* `MASTER`: The device maintains the queue and broadcasts heartbeat/queue information.
 
-**important future bug fix** Currently, if a device is in the queue and falls offline for whatever reason, the queue will be held up as that device moves to the front, blocking the queue from continueing. The current top queue device will need to maintain some sort of heartbeat with the master and if that connection fails, the master should pop that device from the front of the queue. 
+The main loop checks for pending ESP-NOW messages, handles the message based on its type, and then performs behavior based on the current device mode.
 
-**hardware notes** The antenna on the c3 supermini is plenty capable outside of a breadboard - however, once in a breadboard, it can be difficult to establish a new master on election - though, it is plenty capable of maintaining communication with the initial master and election appears flawless when devices are outside a breadboard. 
+## Heartbeat and Master Failover
+
+The master periodically broadcasts a heartbeat message. This heartbeat contains the current queue size and an array of MAC addresses representing the current queue.
+
+Clients use this heartbeat to confirm that the master is still online. If a client misses several heartbeats, it assumes the master may have dropped offline and returns to `SEARCHING` mode.
+
+If a searching device does not hear from a master after the timeout period, it promotes itself to `MASTER`. The timeout includes a randomized/staggered offset so that multiple devices are less likely to promote themselves at exactly the same time.
+
+If two devices temporarily claim to be master and one receives a heartbeat from the other, they compare MAC addresses. The device with the lower-priority MAC address steps down into `OPERATION` mode, while the higher-priority MAC address remains `MASTER`.
+
+This gives the system basic automatic master failover without requiring manual intervention.
+
+## Queue Behavior
+
+The master stores the active queue as a `std::deque` of MAC addresses.
+
+When a client button is pressed, the client sends a unicast message to the master with an update flag. The master checks whether that device's MAC address is already in the queue.
+
+If the device is already in the queue, the master removes it. If the device is not in the queue, the master adds it to the back of the queue.
+
+After changing the queue, the master sends the updated queue directly to the requesting device and then broadcasts the updated queue to the rest of the network. The queue update is stored in the heartbeat data structure so clients can resynchronize when they receive later heartbeat messages.
+
+## LED Feedback
+
+Each device checks its own MAC address against the current queue.
+
+* If the device is not in the queue, its RGB LED is off.
+* If the device is first in the queue, the LED is green.
+* If the device is in the queue but not first, the LED is red.
+
+The built-in LED is also used for basic mode feedback while the device is searching, operating, or is the master.
+
+## Concepts Demonstrated
+
+This project demonstrates several programming and embedded-systems concepts:
+
+* Embedded C++ programming
+* Modular source/header organization
+* Structs and enums
+* Bit flags and Boolean logic
+* Packed message structures
+* Arrays and `std::array`
+* `std::vector` for peer tracking
+* `std::deque` for queue management
+* Callback-driven programming
+* State-machine design
+* ESP-NOW wireless communication
+* Unicast and broadcast message handling
+* Heartbeat monitoring
+* Automatic master failover
+* Hardware/software debugging
+
+## Current Status
+
+The project is functional as a working prototype. It demonstrates button input, RGB LED status feedback, ESP-NOW communication, queue updates, heartbeat monitoring, and automatic master failover.
+
+The code still needs cleanup and refactoring because the network architecture changed several times during development. Some structs, flags, message types, and ID-assignment logic are partially implemented or left over from earlier design plans.
+
+## Known Limitations
+
+If a device is in the queue and falls offline, the queue may be delayed when that device reaches the front. A future version should allow the master to detect when the front-of-queue device is no longer online and remove it from the queue automatically.
+
+Broadcast messages do not have the same acknowledgement/retry behavior as unicast messages. The system partially addresses this by allowing devices to resynchronize from later heartbeat messages, but stronger queue synchronization would improve reliability.
+
+The current hardware prototype also appears to be sensitive to antenna placement. The ESP32-C3 Super Mini communicates more reliably when it is not inserted directly into a breadboard. The devices can generally maintain communication with the initial master, but master election is more reliable when the boards are positioned with better antenna clearance.
+
+## Future Improvements
+
+Planned improvements include:
+
+* Refactor unused structs, flags, and earlier design artifacts
+* Strengthen queue synchronization after master failover
+* Add detection for offline devices that are currently in the queue
+* Add deep-sleep support for devices that are not currently in the queue
+* Wake sleeping devices using a hardware interrupt from the button
+* Add a low-power flag so devices with low battery are not eligible to become master
+* Improve enclosure, wiring, and antenna placement for classroom use
+* Add clearer serial debug output for failover and queue events
